@@ -41,122 +41,8 @@ namespace invsinc
 
         static object FileLock = new object();
 
-        public static void SaveRequest(int id, int seed)
-        {
-            Socket cli = new Socket(SocketType.Stream, ProtocolType.Tcp);
-            cli.Bind(new IPEndPoint(IPAddress.IPv6Any, 0));
-            cli.Connect(new IPEndPoint(IPAddress.IPv6Loopback, 7342));
-
-            List<byte> data = new List<byte>();
-
-            data.Add(1);
-            data.Add((byte)id.ToString().Length);
-
-            data.AddRange(Encoding.UTF8.GetBytes(id.ToString()));
-
-            Random R = new Random(seed);
-
-            for (int i = 0; i < 2048; i++)
-            {
-                data.Add((byte)R.Next(256));
-            }
-
-            
-
-            cli.Send(BitConverter.GetBytes(data.Count));
-            cli.Send(data.ToArray());
-
-            byte[] len = new byte[4];
-
-            cli.Receive(len);
-
-            int len2 = BitConverter.ToInt32(len);
-
-            byte[] dat = new byte[len2];
-
-            cli.Receive(dat);
-
-            if (dat[0] != 1)
-                LogError($"Couldn't save id {id}");
-
-            cli.Dispose();
-        }
-
-        public static byte[] LoadRequest(int id)
-        {
-            Socket cli = new Socket(SocketType.Stream, ProtocolType.Tcp);
-            cli.Bind(new IPEndPoint(IPAddress.IPv6Any, 0));
-            cli.Connect(new IPEndPoint(IPAddress.IPv6Loopback, 7342));
-
-            List<byte> data = new List<byte>();
-
-            data.Add(0);
-            data.Add((byte)id.ToString().Length);
-
-            data.AddRange(Encoding.UTF8.GetBytes(id.ToString()));
-
-            cli.Send(BitConverter.GetBytes(data.Count));
-            cli.Send(data.ToArray());
-
-            byte[] len = new byte[4];
-
-            cli.Receive(len);
-
-            int len2 = BitConverter.ToInt32(len);
-
-            byte[] dat = new byte[len2];
-
-            int tmp = 0;
-
-            while (tmp != len2)
-                tmp+= cli.Receive(dat,tmp,len2-tmp, SocketFlags.None);
-
-            cli.Dispose();
-
-            if (dat[0] != 0)
-                LogError($"Couldn't read id {id}");
-
-            return dat.TakeLast(len2 - 1).ToArray();
-        }
-
         public static void Main(string[] args)
         {
-            /*for (int i = 0; i < 2; i++)
-            {
-
-                int val = i;
-
-                Task.Run(() =>
-                {
-                    Thread.Sleep(1000);
-
-                    Random r = new Random((int)DateTime.Now.Ticks);
-
-                    while (true)
-                    {
-                        int value = r.Next();
-                        SaveRequest(val, value);
-
-                        byte[] dat = LoadRequest(val);
-
-                        Random R = new Random(value);
-
-                        for (int i = 0; i < 2048; i++)
-                        {
-                            if (R.Next(256) != dat[i])
-                            {
-                                LogError("Error didn't read correctly");
-                                break;
-                            }
-                        }
-
-
-                    }
-
-
-                });
-
-            }*/
 
             ExePath = ExePath.Substring(0, ExePath.Length - ExePath.Split('/', '\\').Last().Length);
             Console.ForegroundColor = ConsoleColor.White;
@@ -171,88 +57,6 @@ namespace invsinc
                 sw.Dispose();
 
                 Console.WriteLine("-------------");
-            }
-
-            {/*
-                if (!Directory.Exists(ExePath + "list"))
-                    Directory.CreateDirectory(ExePath + "list");
-
-                List<string> listestoread = new List<string>();
-
-                string[] files = Directory.GetFiles(ExePath + "list");
-
-                foreach (string f in files)
-                {
-                    string[] F = f.Remove(0, (ExePath + "list/").Length).Split('.');
-
-                    if ((F[1] == "back" || F[1] == "mcslist") && !listestoread.Contains(F[0]))
-                    {
-                        listestoread.Add(F[0]);
-                    }
-
-                    if (F[1] == "back")
-                    {
-                        if (File.Exists(ExePath + "list/" + F[0] + ".mcslist"))
-                        {
-                            if (!Directory.Exists(ExePath + "list/Backups"))
-                                Directory.CreateDirectory(ExePath + "list/Backups");
-
-                            if (File.Exists(ExePath + "list//Backups/" + F[0] + ".mcslist"))
-                                File.Delete(ExePath + "list//Backups/" + F[0] + ".mcslist");
-
-                            File.Move(ExePath + "list/" + F[0] + ".mcslist", ExePath + "list//Backups/" + F[0] + ".mcslist");
-                            LogWarn(" Moved (most likely) corrupted file: " + F[0] + ".mcslist" + " to " + ExePath + "list//Backups/" + F[0] + ".mcslist");
-                        }
-
-                        File.Move(ExePath + "list/" + F[0] + ".back", ExePath + "list/" + F[0] + ".mcslist");
-                        LogWarn(" Restored: " + F[0] + " with a backup, last saving process must have been interupted");
-
-                    }
-
-
-                }
-
-                if (listestoread.Count > 0)
-                {
-                    foreach (string s in listestoread)
-                    {
-                        Console.WriteLine("Loading " + s);
-
-                        FileStream fs = File.OpenRead(ExePath + "list/" + s + ".mcslist");
-
-                        if (fs.Length > Int32.MaxValue)
-                        {
-                            LogError(" file is bigger than max supported size (" + s + ".mcslist)");
-                            Console.ReadKey();
-                            return;
-                        }
-
-                        byte[] data = new byte[fs.Length];
-
-                        fs.Read(data, 0, (int)fs.Length);
-                        fs.Close();
-
-                        int ptr = 0;
-
-                        Dictionary<string, string> dic = new Dictionary<string, string>();
-
-                        while (ptr < data.Length)
-                        {
-                            byte len = data[ptr];
-                            ptr++;
-                            string identifier = UTF8Encoding.UTF8.GetString(data, ptr, len);
-                            ptr += len;
-                            int datlen = BitConverter.ToInt32(data, ptr);
-                            ptr += 4;
-                            string dat = UTF8Encoding.UTF8.GetString(data, ptr, datlen);
-                            ptr += datlen;
-                            dic.Add(identifier, dat);
-                        }
-
-                        listes.Add(s, dic);
-                    }
-                }
-                */
             }
 
             {
@@ -334,65 +138,10 @@ namespace invsinc
             Log("Running on port: " + port);
 
             
-
-            
             UInt64 Lcount = 0;
             double ps = 0;
 
             listener.BeginAccept(HandleCo, null);
-
-            /*Task.Run(() =>
-            {
-                
-                
-                while (running == 1)
-                {
-                    TcpClient tcp;
-
-                    try
-                    {
-                        TitleWrite($"{ playerCount + " Online   " + Servers.Count + " Server   " + prelogin.Count + " Prelogin " + ps.ToString("F2") + "/s"}");
-
-
-                        tcp = listener.AcceptTcpClient();
-                        dt = DateTime.Now;
-                        count++;
-                    }
-                    catch (Exception e)
-                    {
-                        LogError(e.ToString());
-                        continue;
-                    }
-
-                    
-
-                    if (!ips.Contains(((IPEndPoint)tcp.Client.RemoteEndPoint).Address.ToString()))
-                    {
-                        LogWarn(" Ip is not whitelisted : " + ((IPEndPoint)tcp.Client.RemoteEndPoint).Address.ToString());
-
-                        if (!extIp.Contains(((IPEndPoint)tcp.Client.RemoteEndPoint).Address.ToString().Split(':')[0]))
-                            extIp.Add(((IPEndPoint)tcp.Client.RemoteEndPoint).Address.ToString().Split(':')[0]);
-
-                        try
-                        {
-                            tcp.Close();
-                            tcp.Dispose();
-                        }
-                        catch (Exception e)
-                        {
-                            LogError(e.ToString());
-                        }
-
-
-                    }
-                    else
-
-
-                }
-
-                running = 2;
-
-            });*/
 
             Task.Run(() =>
             {
@@ -421,20 +170,6 @@ namespace invsinc
                 }
             });
 
-            /*Task.Run(() =>
-            {
-                TimeSpan ts = TimeSpan.FromMinutes(5);
-                while (running == 1)
-                {
-                    
-                    Thread.Sleep(ts);
-
-                    saveLists();
-
-                }
-            });*/
-
-
             while (true)
             {
                 string s = Console.ReadLine();
@@ -457,8 +192,6 @@ namespace invsinc
                         Thread.Sleep(1);
 
                     Console.WriteLine("Stopped");
-
-                    //saveLists();
 
                     return;
                 }
@@ -567,6 +300,18 @@ namespace invsinc
                 
         }
 
+        static byte[] RcvFromSocket(Socket s, int len)
+        {
+            byte[] buf = new byte[len];
+
+            int received = 0;
+
+            while (received != len)
+                received += s.Receive(buf, received, buf.Length - received, SocketFlags.None);
+
+            return buf;
+        }
+
         static void HandleRequest(Socket s)
         {
             if (!s.Connected)
@@ -576,33 +321,29 @@ namespace invsinc
             {
                 DateTime start = DateTime.Now;
 
-                byte[] packet = new byte[4];
+                byte[] packet;
 
                 try
                 {
-                    if (s.Receive(packet,4, SocketFlags.None) != 4)
-                        throw new Exception();
+                    packet = RcvFromSocket(s, 4);
                 }
                 catch (Exception)
                 {
-                    LogError("Couldn't read 4 bytes");
+                    LogError("Couldn't read packet size");
                     return;
                 }
 
                 int size = BitConverter.ToInt32(packet, 0);
 
-                if (size > 1000000000 || size <= 0)
+                if (size > 1_000_000_000 || size <= 0)
                 {
                     LogError("Invalid packet size :" + size);
                     return;
                 }
 
-                packet = new byte[size];
-
                 try
                 {
-                    if (s.Receive(packet) != size)
-                        throw new Exception();
+                    packet = RcvFromSocket(s, size);
                 }
                 catch (Exception)
                 {
@@ -1151,7 +892,7 @@ namespace invsinc
                             }
                             else
                             {
-                                LogWarn(" Server: " + name + " Doesn't exist (player list request)");
+                                LogWarn("Server: " + name + " Doesn't exist (player list request)");
 
                                 s.Send(BitConverter.GetBytes(1));
                                 s.Send(new byte[1] { 253 });
@@ -1161,134 +902,6 @@ namespace invsinc
                         }
 
                         break;
-
-                        { /*
-
-                            case 8://add element in list
-
-                                byte len = packet[ptr];
-                                ptr++;
-                                string identifier = UTF8Encoding.UTF8.GetString(packet, ptr, len);
-                                ptr += len;
-
-                                int datlen = BitConverter.ToInt32(packet, ptr);
-                                string data = UTF8Encoding.UTF8.GetString(packet, ptr, len);
-
-                                lock (listes)
-                                {
-                                    if (listes.TryGetValue(name, out Dictionary<string, string> dic))
-                                    {
-                                        lock (dic)
-                                        {
-                                            if (dic.ContainsKey(identifier))
-                                            {
-                                                dic.Remove(identifier);
-                                            }
-                                            dic.Add(identifier, data);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        Dictionary<string, string> dic2 = new Dictionary<string, string>();
-                                        dic2.Add(identifier, data);
-                                        listes.Add(name, dic2);
-                                    }
-                                }
-
-                                strm.Write(BitConverter.GetBytes(1), 0, 4);
-                                strm.WriteByte(7);
-                                strm.Flush();
-
-                                lock (tosave)
-                                {
-                                    tosave.Add(name);
-                                }
-
-                                break;
-
-                            case 9://remove element in list
-
-                                len = packet[ptr];
-                                ptr++;
-                                identifier = UTF8Encoding.UTF8.GetString(packet, ptr, len);
-                                ptr += len;
-
-
-                                lock (listes)
-                                {
-                                    if (listes.TryGetValue(name, out Dictionary<string, string> dic))
-                                    {
-                                        lock (dic)
-                                        {
-                                            if (dic.ContainsKey(identifier))
-                                            {
-                                                dic.Remove(identifier);
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        strm.Write(BitConverter.GetBytes(1), 0, 4);
-                                        strm.WriteByte(251);
-                                        strm.Flush();
-                                        LogWarn(" List: " + name + " Doesn't exist");
-                                        break;
-                                    }
-                                }
-                                strm.Write(BitConverter.GetBytes(1), 0, 4);
-                                strm.WriteByte(8);
-                                strm.Flush();
-
-                                lock (tosave)
-                                {
-                                    tosave.Add(name);
-                                }
-
-                                break;
-
-                            case 10://request element in list
-
-                                len = packet[ptr];
-                                ptr++;
-                                identifier = UTF8Encoding.UTF8.GetString(packet, ptr, len);
-                                ptr += len;
-
-                                string dat = "";
-
-                                lock (listes)
-                                {
-                                    if (listes.TryGetValue(name, out Dictionary<string, string> dic))
-                                    {
-                                        lock (dic)
-                                        {
-                                            if (!dic.TryGetValue(identifier, out dat))
-                                            {
-                                                strm.Write(BitConverter.GetBytes(1), 0, 4);
-                                                strm.WriteByte(250);
-                                                strm.Flush();
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        strm.Write(BitConverter.GetBytes(1), 0, 4);
-                                        strm.WriteByte(251);
-                                        strm.Flush();
-
-                                        LogWarn(" List: " + name + " Doesn't exist");
-                                        break;
-                                    }
-                                }
-                                byte[] buf = UTF8Encoding.UTF8.GetBytes(dat);
-                                strm.Write(BitConverter.GetBytes(5 + buf.Length), 0, 4);
-                                strm.WriteByte(9);
-                                strm.Write(BitConverter.GetBytes(buf.Length), 0, 4);
-                                strm.Write(buf, 0, buf.Length);
-                                strm.Flush();
-
-                                break;*/
-                        }
 
                     case 11://suprime le fichier
 
@@ -1393,57 +1006,5 @@ namespace invsinc
                 else
                     TextQueue.Enqueue($"\u001B]0;{text}\u0007");
         }
-
-        /*static void saveLists()
-        {
-            lock (tosave)
-            {
-                while (tosave.Count > 0)
-                {
-                    string name = tosave.First();
-
-                    Dictionary<string, string> dic = null;
-
-                    lock (listes)
-                    {
-                        listes.TryGetValue(name, out dic);
-                    }
-
-                    if (dic != null)
-                    {
-                        if (File.Exists(ExePath + "list/" + name + ".mcslist"))
-                            File.Move(ExePath + "list/" + name + ".mcslist", ExePath + "list/" + name + ".back");
-
-                        FileStream fs = File.OpenWrite(ExePath + "list/" + name + ".mcslist");
-
-                        lock (dic)
-                        {
-                            foreach (KeyValuePair<string, string> pair in dic)
-                            {
-                                byte[] buf = UTF8Encoding.UTF8.GetBytes(pair.Key);
-
-                                fs.WriteByte((byte)buf.Length);
-                                fs.Write(buf, 0, buf.Length);
-
-                                buf = UTF8Encoding.UTF8.GetBytes(pair.Value);
-
-                                fs.Write(BitConverter.GetBytes(buf.Length), 0, 4);
-                                fs.Write(buf, 0, buf.Length);
-
-                            }
-                        }
-                        fs.Flush();
-                        fs.Close();
-                    }
-
-                    if (File.Exists(ExePath + "list/" + name + ".back"))
-                        File.Delete(ExePath + "list/" + name + ".back");
-
-                    tosave.Remove(name);
-
-                }
-            }
-        }*/
-
     }
 }
