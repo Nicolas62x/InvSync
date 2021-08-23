@@ -50,7 +50,7 @@ namespace invsinc
             if (!File.Exists(ExePath + "settings.yaml"))
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                LogWarn(" Couldn't find settings.yaml\nCreating default one in " + ExePath);
+                LogWarn("Couldn't find settings.yaml\nCreating default one in " + ExePath);
                 Console.WriteLine(defaultSettings);
                 StreamWriter sw = File.CreateText(ExePath + "settings.yaml");
                 sw.Write(defaultSettings);
@@ -416,9 +416,7 @@ namespace invsinc
                         catch (Exception e)
                         {
                             LogError($"Error in file request of {name}\n{e}");
-                        }
-
-                        
+                        }                        
 
                         lock (FileLock)
                         {
@@ -507,69 +505,349 @@ namespace invsinc
 
                         Log("Adding server: " + name);
 
-                        lock (Servers)
+                        try
                         {
-                            lastLock = "Add a Server";
-                            try
+
+                            lock (Servers)
                             {
-                                if (Servers.ContainsKey(name))
+                                lastLock = "Add a Server";
+                                try
                                 {
-                                    lock (playercountlock)
-                                        if (Servers.TryGetValue(name, out List<string> srv))
-                                            playerCount -= srv.Count;
-                                    Servers.Remove(name);
+                                    if (Servers.ContainsKey(name))
+                                    {
+                                        lock (playercountlock)
+                                            if (Servers.TryGetValue(name, out List<string> srv))
+                                                playerCount -= srv.Count;
+                                        Servers.Remove(name);
+                                    }
+
+
+                                    Servers.Add(name, new List<string>());
                                 }
-
-
-                                Servers.Add(name, new List<string>());
+                                catch (Exception e)
+                                {
+                                    LogError(e.ToString());
+                                }
+                                lastLock = "";
                             }
-                            catch (Exception e)
-                            {
-                                LogError(e.ToString());
-                            }
-                            lastLock = "";
+
+                            s.Send(BitConverter.GetBytes(1));
+                            s.Send(new byte[1] { 2 });
                         }
-
-                        s.Send(BitConverter.GetBytes(1));
-                        s.Send(new byte[1] { 2 });
+                        catch (Exception e)
+                        {
+                            LogError($"Error adding server: {name}\n{e}");
+                        }
 
                         break;
 
                     case 3://login
 
-
-
-                        if (Servers.TryGetValue(name, out List<string> serv))
+                        try
                         {
-                            byte namelen2 = packet[ptr];
-                            ptr++;
-
-                            string name2 = UTF8Encoding.UTF8.GetString(packet, ptr, namelen2);
-                            ptr += namelen;
-
-                            lock (prelogin)
+                            if (Servers.TryGetValue(name, out List<string> serv))
                             {
+                                byte namelen2 = packet[ptr];
+                                ptr++;
+
+                                string name2 = UTF8Encoding.UTF8.GetString(packet, ptr, namelen2);
+                                ptr += namelen;
+
+                                lock (prelogin)
+                                {
 
 
+
+                                    lock (Servers)
+                                    {
+                                        lastLock = "Login";
+                                        try
+                                        {
+                                            foreach (List<string> servs in Servers.Values)
+                                            {
+                                                lock (servs)
+                                                {
+                                                    if (servs.Contains(name2))
+                                                    {
+                                                        s.Send(BitConverter.GetBytes(1));
+                                                        s.Send(new byte[1] { 252 });
+
+                                                        LogWarn($"Player {name2} is allready connected");
+
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        catch (Exception e)
+                                        {
+                                            LogError(e.ToString());
+                                        }
+                                        lastLock = "";
+                                    }
+
+                                    lock (serv)
+                                    {
+                                        Log("login " + name2 + " on: " + name);
+                                        serv.Add(name2);
+
+
+                                        if (prelogin.ContainsKey(name2))
+                                            prelogin.Remove(name2);
+                                    }
+
+
+                                }
+
+                                lock (playercountlock)
+                                {
+                                    playerCount++;
+                                }
+
+                                s.Send(BitConverter.GetBytes(1));
+                                s.Send(new byte[1] { 3 });
+
+                            }
+                            else
+                            {
+                                s.Send(BitConverter.GetBytes(1));
+                                s.Send(new byte[1] { 253 });
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            LogError($"Error in login of: {name}\n{e}");
+                        }
+
+                        break;
+
+                    case 4://disconnect
+
+                        try
+                        {
+                            if (Servers.TryGetValue(name, out List<string> serv2))
+                            {
+                                byte namelen2 = packet[ptr];
+                                ptr++;
+
+                                string name2 = UTF8Encoding.UTF8.GetString(packet, ptr, namelen2);
+                                ptr += namelen;
+
+                                lock (serv2)
+                                {
+
+                                    if (serv2.Contains(name2))
+                                    {
+                                        Log("Disconecting " + name2 + " from: " + name);
+                                        serv2.Remove(name2);
+                                    }
+                                    else
+                                    {
+                                        LogWarn($"Player {name2} is not in {name} (Disconnect Request)");
+                                    }
+
+                                }
+
+                                lock (playercountlock)
+                                {
+                                    playerCount--;
+                                }
+
+                                s.Send(BitConverter.GetBytes(1));
+                                s.Send(new byte[1] { 3 });
+
+                            }
+                            else
+                            {
+                                s.Send(BitConverter.GetBytes(1));
+                                s.Send(new byte[1] { 253 });
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            LogError($"Error in disconnect of: {name}\n{e}");
+                        }
+
+                        break;
+
+                    case 5://player count
+
+                        try
+                        {
+                            int count = -1;
+
+                            if (name == "all")
+                            {
 
                                 lock (Servers)
                                 {
-                                    lastLock = "Login";
+                                    lastLock = "PlayerCount";
+                                    try
+                                    {
+                                        count = 0;
+                                        foreach (List<string> servs in Servers.Values)
+                                        {
+                                            count += servs.Count;
+                                        }
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        LogError(e.ToString());
+                                    }
+                                    lastLock = "";
+                                }
+
+                                lock (playercountlock)
+                                    playerCount = count;
+
+                                s.Send(BitConverter.GetBytes(5));
+                                s.Send(new byte[1] { 5 });
+                                s.Send(BitConverter.GetBytes(count));
+
+                            }
+                            else
+                            {
+
+                                lock (Servers)
+                                {
+                                    lastLock = "PlayerCount2";
+                                    if (Servers.TryGetValue(name, out List<string> servv))
+                                    {
+                                        count = servv.Count;
+                                    }
+                                    lastLock = "";
+                                }
+
+                                if (count > -1)
+                                {
+                                    //Console.WriteLine("Sent " + name + " PlayerCount: " + count);
+
+                                    s.Send(BitConverter.GetBytes(5));
+                                    s.Send(new byte[1] { 5 });
+                                    s.Send(BitConverter.GetBytes(count));
+                                }
+                                else
+                                {
+                                    LogWarn("Server: " + name + " Doesn't exist");
+
+                                    s.Send(BitConverter.GetBytes(1));
+                                    s.Send(new byte[1] { 253 });
+                                }
+
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            LogError($"Error in playercount of: {name}\n{e}");
+                        }
+
+                        break;
+
+                    case 6://prelogin
+
+                        try
+                        {
+                            lock (prelogin)
+                            {
+                                if (prelogin.ContainsKey(name) && prelogin.TryGetValue(name, out DateTime t0))
+                                {
+                                    if ((DateTime.Now - t0).TotalMilliseconds < preloginTo)
+                                    {
+                                        s.Send(BitConverter.GetBytes(1));
+                                        s.Send(new byte[1] { 252 });
+
+                                        LogWarn($"Player {name} is allready preloged");
+
+                                        return;
+                                    }
+                                    else
+                                    {
+                                        prelogin.Remove(name);
+                                    }
+
+                                }
+
+                                lock (Servers)
+                                {
+                                    lastLock = "Prelog";
                                     try
                                     {
                                         foreach (List<string> servs in Servers.Values)
                                         {
                                             lock (servs)
                                             {
-                                                if (servs.Contains(name2))
+                                                if (servs.Contains(name))
                                                 {
+
                                                     s.Send(BitConverter.GetBytes(1));
                                                     s.Send(new byte[1] { 252 });
 
-                                                    LogWarn($"Player {name2} is allready connected");
+                                                    LogWarn($"Player {name} is allready connected");
 
                                                     return;
                                                 }
+                                            }
+
+                                        }
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        LogError(e.ToString());
+                                    }
+
+                                    lastLock = "";
+                                }
+
+                                prelogin.Add(name, DateTime.Now);
+                            }
+
+
+                            Log("Prelogin " + name);
+
+                            s.Send(BitConverter.GetBytes(1));
+                            s.Send(new byte[1] { 3 });
+
+
+                            Thread.Sleep(preloginTo);
+
+                            lock (prelogin)
+                                if (prelogin.ContainsKey(name))
+                                {
+                                    prelogin.Remove(name);
+
+                                    Log("Prelogin TimeOut of " + name);
+                                }
+                        }
+                        catch (Exception e)
+                        {
+                            LogError($"Error in prelogin of: {name}\n{e}");
+                        }
+
+                        break;
+
+
+                    case 7://list
+
+                        try
+                        {
+                            int count = -1;
+
+                            List<string> players = new List<string>();
+
+                            if (name == "all")
+                            {
+
+                                lock (Servers)
+                                {
+                                    lastLock = "List";
+                                    try
+                                    {
+                                        foreach (List<string> servs in Servers.Values)
+                                        {
+                                            lock (servs)
+                                            {
+                                                foreach (string s2 in servs)
+                                                    players.Add(s2);
                                             }
                                         }
                                     }
@@ -580,302 +858,10 @@ namespace invsinc
                                     lastLock = "";
                                 }
 
-                                lock (serv)
-                                {
-                                    Log("login " + name2 + " on: " + name);
-                                    serv.Add(name2);
+                                count = players.Count;
 
-
-                                    if (prelogin.ContainsKey(name2))
-                                        prelogin.Remove(name2);
-                                }
-
-
-                            }
-
-                            lock (playercountlock)
-                            {
-                                playerCount++;
-                            }
-
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 3 });
-
-                        }
-                        else
-                        {
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 253 });
-                        }
-
-
-                        break;
-
-                    case 4://deconect
-
-                        if (Servers.TryGetValue(name, out List<string> serv2))
-                        {
-                            byte namelen2 = packet[ptr];
-                            ptr++;
-
-                            string name2 = UTF8Encoding.UTF8.GetString(packet, ptr, namelen2);
-                            ptr += namelen;
-
-                            lock (serv2)
-                            {
-
-                                if (serv2.Contains(name2))
-                                {
-                                    Log("Disconecting " + name2 + " from: " + name);
-                                    serv2.Remove(name2);
-                                }
-                                else
-                                {
-                                    LogWarn($"Player {name2} is not in {name} (Deconect Request)");
-                                }
-
-                            }
-
-                            lock (playercountlock)
-                            {
-                                playerCount--;
-                            }
-
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 3 });
-
-                        }
-                        else
-                        {
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 253 });
-                        }
-
-
-                        break;
-
-                    case 5://player count
-
-                        int count = -1;
-
-                        if (name == "all")
-                        {
-
-                            lock (Servers)
-                            {
-                                lastLock = "PlayerCount";
-                                try
-                                {
-                                    count = 0;
-                                    foreach (List<string> servs in Servers.Values)
-                                    {
-                                        count += servs.Count;
-                                    }
-                                }
-                                catch (Exception e)
-                                {
-                                    LogError(e.ToString());
-                                }
-                                lastLock = "";
-                            }
-
-                            lock (playercountlock)
-                                playerCount = count;
-
-                            s.Send(BitConverter.GetBytes(5));
-                            s.Send(new byte[1] { 5 });
-                            s.Send(BitConverter.GetBytes(count));
-
-                        }
-                        else
-                        {
-
-                            lock (Servers)
-                            {
-                                lastLock = "PlayerCount2";
-                                if (Servers.TryGetValue(name, out List<string> servv))
-                                {
-                                    count = servv.Count;
-                                }
-                                lastLock = "";
-                            }
-
-                            if (count > -1)
-                            {
-                                //Console.WriteLine("Sent " + name + " PlayerCount: " + count);
-
-                                s.Send(BitConverter.GetBytes(5));
-                                s.Send(new byte[1] { 5 });
-                                s.Send(BitConverter.GetBytes(count));
-                            }
-                            else
-                            {
-                                LogWarn(" Server: " + name + " Doesn't exist");
-
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 253 });
-                            }
-
-                        }
-
-
-                        break;
-
-                    case 6://prelogin
-
-
-
-                        lock (prelogin)
-                        {
-                            if (prelogin.ContainsKey(name) && prelogin.TryGetValue(name, out DateTime t0))
-                            {
-                                if ((DateTime.Now - t0).TotalMilliseconds < preloginTo)
-                                {
-                                    s.Send(BitConverter.GetBytes(1));
-                                    s.Send(new byte[1] { 252 });
-
-                                    LogWarn($"Player {name} is allready preloged");
-
-                                    return;
-                                }
-                                else
-                                {
-                                    prelogin.Remove(name);
-                                }
-
-                            }
-
-                            lock (Servers)
-                            {
-                                lastLock = "Prelog";
-                                try
-                                {
-                                    foreach (List<string> servs in Servers.Values)
-                                    {
-                                        lock (servs)
-                                        {
-                                            if (servs.Contains(name))
-                                            {
-
-                                                s.Send(BitConverter.GetBytes(1));
-                                                s.Send(new byte[1] { 252 });
-
-                                                LogWarn($"Player {name} is allready connected");
-
-                                                return;
-                                            }
-                                        }
-
-                                    }
-                                }
-                                catch (Exception e)
-                                {
-                                    LogError(e.ToString());
-                                }
-
-                                lastLock = "";
-                            }
-
-                            prelogin.Add(name, DateTime.Now);
-                        }
-
-
-                        Log("Prelogin " + name);
-
-                        s.Send(BitConverter.GetBytes(1));
-                        s.Send(new byte[1] { 3 });
-
-
-                        Thread.Sleep(preloginTo);
-
-                        lock (prelogin)
-                            if (prelogin.ContainsKey(name))
-                            {
-                                prelogin.Remove(name);
-
-                                Log("Prelogin TimeOut of " + name);
-                            }
-
-
-                        break;
-
-                        
-                            case 7://list
-
-                                count = -1;
-
-                                List<string> players = new List<string>();
-
-                        if (name == "all")
-                        {
-
-                            lock (Servers)
-                            {
-                                lastLock = "List";
-                                try
-                                {
-                                    foreach (List<string> servs in Servers.Values)
-                                    {
-                                        lock (servs)
-                                        {
-                                            foreach (string s2 in servs)
-                                                players.Add(s2);
-                                        }
-                                    }
-                                }
-                                catch (Exception e)
-                                {
-                                    LogError(e.ToString());
-                                }
-                                lastLock = "";
-                            }
-
-                            count = players.Count;
-
-                            lock (playercountlock)
-                                playerCount = count;
-
-                            string text = "";
-
-                            foreach (string s2 in players)
-                            {
-                                text += text.Length > 0 ? " " + s2 : s2;
-                            }
-                            byte[] buf2 = UTF8Encoding.UTF8.GetBytes(text);
-
-                            s.Send(BitConverter.GetBytes(5 + buf2.Length));
-                            s.Send(new byte[1] { 6 });
-                            s.Send(BitConverter.GetBytes(count));
-                            s.Send(buf2);
-
-                        }
-                        else
-                        {
-
-                            lock (Servers)
-                            {
-                                lastLock = "List2";
-                                try
-                                {
-                                    if (Servers.TryGetValue(name, out List<string> servv))
-                                    {
-                                        lock (servv)
-                                        {
-                                            foreach (string s2 in servv)
-                                                players.Add(s2);
-                                        }
-                                        count = players.Count;
-                                    }
-                                }
-                                catch (Exception e)
-                                {
-                                    LogError(e.ToString());
-                                }
-                                lastLock = "";
-                            }
-
-                            if (count > -1)
-                            {
+                                lock (playercountlock)
+                                    playerCount = count;
 
                                 string text = "";
 
@@ -883,51 +869,118 @@ namespace invsinc
                                 {
                                     text += text.Length > 0 ? " " + s2 : s2;
                                 }
-                                byte[] buf3 = UTF8Encoding.UTF8.GetBytes(text);
+                                byte[] buf2 = UTF8Encoding.UTF8.GetBytes(text);
 
-                                s.Send(BitConverter.GetBytes(5 + buf3.Length));
+                                s.Send(BitConverter.GetBytes(5 + buf2.Length));
                                 s.Send(new byte[1] { 6 });
                                 s.Send(BitConverter.GetBytes(count));
-                                s.Send(buf3);
+                                s.Send(buf2);
+
                             }
                             else
                             {
-                                LogWarn("Server: " + name + " Doesn't exist (player list request)");
 
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 253 });
+                                lock (Servers)
+                                {
+                                    lastLock = "List2";
+                                    try
+                                    {
+                                        if (Servers.TryGetValue(name, out List<string> servv))
+                                        {
+                                            lock (servv)
+                                            {
+                                                foreach (string s2 in servv)
+                                                    players.Add(s2);
+                                            }
+                                            count = players.Count;
+                                        }
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        LogError(e.ToString());
+                                    }
+                                    lastLock = "";
+                                }
+
+                                if (count > -1)
+                                {
+
+                                    string text = "";
+
+                                    foreach (string s2 in players)
+                                    {
+                                        text += text.Length > 0 ? " " + s2 : s2;
+                                    }
+                                    byte[] buf3 = UTF8Encoding.UTF8.GetBytes(text);
+
+                                    s.Send(BitConverter.GetBytes(5 + buf3.Length));
+                                    s.Send(new byte[1] { 6 });
+                                    s.Send(BitConverter.GetBytes(count));
+                                    s.Send(buf3);
+                                }
+                                else
+                                {
+                                    LogWarn("Server: " + name + " Doesn't exist (player list request)");
+
+                                    s.Send(BitConverter.GetBytes(1));
+                                    s.Send(new byte[1] { 253 });
+
+                                }
 
                             }
-
+                        }
+                        catch (Exception e)
+                        {
+                            LogError($"Error in list of: {name}\n{e}");
                         }
 
                         break;
 
                     case 11://suprime le fichier
+                       
 
                         Log("Delete request of " + name + ".dat");
 
-                        while (saving.Contains(name))
-                            Thread.Sleep(1);
+                    rst3:
 
-                        lock (saving)
+                        try
                         {
+                            while (saving.Contains(name))
+                                Thread.Sleep(1);
+                        }
+                        catch (Exception)
+                        {
+
+                        }
+
+                        lock (FileLock)
+                        {
+                            if (saving.Contains(name))
+                                goto rst3;
+
                             saving.Add(name);
                         }
 
-                        if (File.Exists(FilesPath + name + ".dat"))
+                        try
                         {
-                            File.Delete(FilesPath + name + ".dat");
+                            if (File.Exists(FilesPath + name + ".dat"))
+                            {
+                                File.Delete(FilesPath + name + ".dat");
 
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 10 });
+                                s.Send(BitConverter.GetBytes(1));
+                                s.Send(new byte[1] { 10 });
 
-                            //Log("SaveRequest Writed " + name + ".dat -> " + value.ToString("X") + " " + file.Length + " bytes");
+                                //Log("SaveRequest Writed " + name + ".dat -> " + value.ToString("X") + " " + file.Length + " bytes");
+                            }
+                            else
+                            {
+                                s.Send(BitConverter.GetBytes(1));
+                                s.Send(new byte[1] { 249 });
+                            }
                         }
-                        else
+                        catch (Exception e)
                         {
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 249 });
+                            LogError($"Error in delete request of {name}\n{e}");
                         }
 
                         lock (saving)
@@ -959,8 +1012,6 @@ namespace invsinc
                 }
                 catch (Exception)
                 {
-
-
                 }
             }
         }
