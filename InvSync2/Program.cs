@@ -312,6 +312,14 @@ namespace invsinc
             return buf;
         }
 
+        static void SendToSocket(Socket s, byte[] buf)
+        {
+            int sended = 0;
+
+            while (sended != buf.Length)
+                sended += s.Send(buf, sended, buf.Length - sended, SocketFlags.None);
+        }
+
         static void HandleRequest(Socket s)
         {
             if (!s.Connected)
@@ -347,7 +355,7 @@ namespace invsinc
                 }
                 catch (Exception)
                 {
-                    LogError($"Couldn't read {packet.Length} bytes");
+                    LogError($"Couldn't read {size} bytes");
                     return;
                 }
 
@@ -396,9 +404,9 @@ namespace invsinc
                             {
                                 byte[] dat2 = File.ReadAllBytes(FilesPath + name + ".dat");
 
-                                s.Send(BitConverter.GetBytes(dat2.Length + 1));
-                                s.Send(new byte[1]);
-                                s.Send(dat2);
+                                SendToSocket(s, BitConverter.GetBytes(dat2.Length + 1));
+                                SendToSocket(s, new byte[1]);
+                                SendToSocket(s, dat2);
 
                                 ulong value = 0;
                                 for (int i = 0; i < dat2.Length; i++)
@@ -409,8 +417,8 @@ namespace invsinc
                             }
                             else
                             {
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 254 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 254 });
                             }
                         }
                         catch (Exception e)
@@ -472,8 +480,8 @@ namespace invsinc
 
                                 fs.Dispose();
 
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 1 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 1 });
 
                                 ulong value = 0;
                                 for (int i = 0; i < file.Length; i++)
@@ -484,8 +492,8 @@ namespace invsinc
                             }
                             else
                             {
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 255 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 255 });
                             }
                         }
                         catch (Exception e)
@@ -531,8 +539,8 @@ namespace invsinc
                                 lastLock = "";
                             }
 
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 2 });
+                            SendToSocket(s, BitConverter.GetBytes(1));
+                            SendToSocket(s, new byte[1] { 2 });
                         }
                         catch (Exception e)
                         {
@@ -569,8 +577,8 @@ namespace invsinc
                                                 {
                                                     if (servs.Contains(name2))
                                                     {
-                                                        s.Send(BitConverter.GetBytes(1));
-                                                        s.Send(new byte[1] { 252 });
+                                                        SendToSocket(s, BitConverter.GetBytes(1));
+                                                        SendToSocket(s, new byte[1] { 252 });
 
                                                         LogWarn($"Player {name2} is allready connected");
 
@@ -604,14 +612,14 @@ namespace invsinc
                                     playerCount++;
                                 }
 
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 3 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 3 });
 
                             }
                             else
                             {
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 253 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 253 });
                             }
                         }
                         catch (Exception e)
@@ -653,14 +661,14 @@ namespace invsinc
                                     playerCount--;
                                 }
 
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 3 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 3 });
 
                             }
                             else
                             {
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 253 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 253 });
                             }
                         }
                         catch (Exception e)
@@ -700,9 +708,9 @@ namespace invsinc
                                 lock (playercountlock)
                                     playerCount = count;
 
-                                s.Send(BitConverter.GetBytes(5));
-                                s.Send(new byte[1] { 5 });
-                                s.Send(BitConverter.GetBytes(count));
+                                SendToSocket(s, BitConverter.GetBytes(5));
+                                SendToSocket(s, new byte[1] { 5 });
+                                SendToSocket(s, BitConverter.GetBytes(count));
 
                             }
                             else
@@ -722,16 +730,16 @@ namespace invsinc
                                 {
                                     //Console.WriteLine("Sent " + name + " PlayerCount: " + count);
 
-                                    s.Send(BitConverter.GetBytes(5));
-                                    s.Send(new byte[1] { 5 });
-                                    s.Send(BitConverter.GetBytes(count));
+                                    SendToSocket(s, BitConverter.GetBytes(5));
+                                    SendToSocket(s, new byte[1] { 5 });
+                                    SendToSocket(s, BitConverter.GetBytes(count));
                                 }
                                 else
                                 {
                                     LogWarn("Server: " + name + " Doesn't exist");
 
-                                    s.Send(BitConverter.GetBytes(1));
-                                    s.Send(new byte[1] { 253 });
+                                    SendToSocket(s, BitConverter.GetBytes(1));
+                                    SendToSocket(s, new byte[1] { 253 });
                                 }
 
                             }
@@ -753,8 +761,8 @@ namespace invsinc
                                 {
                                     if ((DateTime.Now - t0).TotalMilliseconds < preloginTo)
                                     {
-                                        s.Send(BitConverter.GetBytes(1));
-                                        s.Send(new byte[1] { 252 });
+                                        SendToSocket(s, BitConverter.GetBytes(1));
+                                        SendToSocket(s, new byte[1] { 252 });
 
                                         LogWarn($"Player {name} is allready preloged");
 
@@ -779,8 +787,8 @@ namespace invsinc
                                                 if (servs.Contains(name))
                                                 {
 
-                                                    s.Send(BitConverter.GetBytes(1));
-                                                    s.Send(new byte[1] { 252 });
+                                                    SendToSocket(s, BitConverter.GetBytes(1));
+                                                    SendToSocket(s, new byte[1] { 252 });
 
                                                     LogWarn($"Player {name} is allready connected");
 
@@ -804,8 +812,8 @@ namespace invsinc
 
                             Log("Prelogin " + name);
 
-                            s.Send(BitConverter.GetBytes(1));
-                            s.Send(new byte[1] { 3 });
+                            SendToSocket(s, BitConverter.GetBytes(1));
+                            SendToSocket(s, new byte[1] { 3 });
 
 
                             Thread.Sleep(preloginTo);
@@ -871,10 +879,10 @@ namespace invsinc
                                 }
                                 byte[] buf2 = UTF8Encoding.UTF8.GetBytes(text);
 
-                                s.Send(BitConverter.GetBytes(5 + buf2.Length));
-                                s.Send(new byte[1] { 6 });
-                                s.Send(BitConverter.GetBytes(count));
-                                s.Send(buf2);
+                                SendToSocket(s, BitConverter.GetBytes(5 + buf2.Length));
+                                SendToSocket(s, new byte[1] { 6 });
+                                SendToSocket(s, BitConverter.GetBytes(count));
+                                SendToSocket(s, buf2);
 
                             }
                             else
@@ -913,17 +921,17 @@ namespace invsinc
                                     }
                                     byte[] buf3 = UTF8Encoding.UTF8.GetBytes(text);
 
-                                    s.Send(BitConverter.GetBytes(5 + buf3.Length));
-                                    s.Send(new byte[1] { 6 });
-                                    s.Send(BitConverter.GetBytes(count));
-                                    s.Send(buf3);
+                                    SendToSocket(s, BitConverter.GetBytes(5 + buf3.Length));
+                                    SendToSocket(s, new byte[1] { 6 });
+                                    SendToSocket(s, BitConverter.GetBytes(count));
+                                    SendToSocket(s, buf3);
                                 }
                                 else
                                 {
                                     LogWarn("Server: " + name + " Doesn't exist (player list request)");
 
-                                    s.Send(BitConverter.GetBytes(1));
-                                    s.Send(new byte[1] { 253 });
+                                    SendToSocket(s, BitConverter.GetBytes(1));
+                                    SendToSocket(s, new byte[1] { 253 });
 
                                 }
 
@@ -967,15 +975,15 @@ namespace invsinc
                             {
                                 File.Delete(FilesPath + name + ".dat");
 
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 10 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 10 });
 
                                 //Log("SaveRequest Writed " + name + ".dat -> " + value.ToString("X") + " " + file.Length + " bytes");
                             }
                             else
                             {
-                                s.Send(BitConverter.GetBytes(1));
-                                s.Send(new byte[1] { 249 });
+                                SendToSocket(s, BitConverter.GetBytes(1));
+                                SendToSocket(s, new byte[1] { 249 });
                             }
                         }
                         catch (Exception e)
@@ -994,8 +1002,8 @@ namespace invsinc
 
                         LogError($"Invalid Packet ({packet.Length} bytes) " + BitConverter.ToString(packet));
 
-                        s.Send(BitConverter.GetBytes(1));
-                        s.Send(new byte[1] { 255 });
+                        SendToSocket(s, BitConverter.GetBytes(1));
+                        SendToSocket(s, new byte[1] { 255 });
 
                         break;
                 }
@@ -1007,8 +1015,8 @@ namespace invsinc
 
                 try
                 {
-                    s.Send(BitConverter.GetBytes(1));
-                    s.Send(new byte[1] { 255 });
+                    SendToSocket(s, BitConverter.GetBytes(1));
+                    SendToSocket(s, new byte[1] { 255 });
                 }
                 catch (Exception)
                 {
