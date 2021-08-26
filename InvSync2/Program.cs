@@ -31,8 +31,6 @@ namespace invsinc
 
         static string lastLock = "";
 
-        static bool debug = false;
-
         static string FilesPath = "";
 
         static byte running = 1;
@@ -40,9 +38,90 @@ namespace invsinc
         static UInt64 count = 0;
 
         static object FileLock = new object();
+        static void Check(byte id)
+        {
+            Socket s = new Socket(SocketType.Stream, ProtocolType.Tcp);
+
+            s.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 7342));
+
+            byte[] buf = new byte[10001];
+
+            new Random().NextBytes(buf);
+
+            buf[0] = 1;
+            buf[1] = 1;
+            buf[2] = (byte)(((byte)'0') + id);
+
+            SendToSocket(s, BitConverter.GetBytes(buf.Length));
+            SendToSocket(s, buf);
+
+            byte[] data = RcvFromSocket(s, 4);
+
+            int size = BitConverter.ToInt32(data);
+
+            data = RcvFromSocket(s, size);
+
+            if (data[0] > 128)
+                LogError($"Responded with {data[0]}");
+
+            s.Dispose();
+
+            s = new Socket(SocketType.Stream, ProtocolType.Tcp);
+
+            s.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 7342));
+
+            byte[] buf2 = new byte[3];
+
+            buf2[0] = 0;
+            buf2[1] = 1;
+            buf2[2] = (byte)(((byte)'0') + id);
+
+            SendToSocket(s, BitConverter.GetBytes(buf2.Length));
+            SendToSocket(s, buf2);
+
+            data = RcvFromSocket(s, 4);
+
+            size = BitConverter.ToInt32(data);
+
+            data = RcvFromSocket(s, size);
+
+            if (data[0] > 128)
+                LogError($"Responded with {data[0]}");
+
+            for (int i = 1; i < data.Length; i++)
+            {
+                if (data[i] != buf[i+2])
+                {
+                    LogError("Invalid Data");
+                    break;
+                }
+            }
+
+            s.Dispose();
+
+            Thread.Sleep(100);
+        }
 
         public static void Main(string[] args)
         {
+            /*for (byte i = 0; i < 10; i++)
+            {
+                byte tmp = i;
+
+                Task.Run(() =>
+                {
+                    Thread.Sleep(2000);
+
+                    while (true)
+                    {
+                        if (error)
+                            break;
+                        Check(tmp);
+
+                    }
+                });
+            }*/
+            
 
             ExePath = ExePath.Substring(0, ExePath.Length - ExePath.Split('/', '\\').Last().Length);
             Console.ForegroundColor = ConsoleColor.White;
@@ -243,11 +322,6 @@ namespace invsinc
                         Console.WriteLine("There are no unauthorized ips that have tried to connect");
 
                 }
-                else if (s == "debug")
-                {
-                    debug = !debug;
-                    Console.WriteLine("Debug mode: " + debug);
-                }
                 else
                 {
                     Console.WriteLine("Command list: ");
@@ -305,9 +379,13 @@ namespace invsinc
             byte[] buf = new byte[len];
 
             int received = 0;
+            int c = 0;
 
             while (received != len)
-                received += s.Receive(buf, received, buf.Length - received, SocketFlags.None);
+                if (s.Connected && c++ < 100)
+                    received += s.Receive(buf, received, buf.Length - received, SocketFlags.None);
+                else
+                    throw new Exception("Couldn't receive data");
 
             return buf;
         }
@@ -315,9 +393,14 @@ namespace invsinc
         static void SendToSocket(Socket s, byte[] buf)
         {
             int sended = 0;
+            int c = 0;
 
             while (sended != buf.Length)
-                sended += s.Send(buf, sended, buf.Length - sended, SocketFlags.None);
+                if (s.Connected && c++ < 100)
+                    sended += s.Send(buf, sended, buf.Length - sended, SocketFlags.None);
+                else
+                    throw new Exception("Couldn't send data");
+            
         }
 
         static void HandleRequest(Socket s)
@@ -345,7 +428,7 @@ namespace invsinc
 
                 if (size > 1_000_000_000 || size <= 0)
                 {
-                    LogError("Invalid packet size :" + size);
+                    LogError("Invalid packet size: " + size);
                     return;
                 }
 
@@ -358,6 +441,8 @@ namespace invsinc
                     LogError($"Couldn't read {size} bytes");
                     return;
                 }
+
+                DateTime afterRcv = DateTime.Now;
 
                 int ptr = 0;
 
@@ -448,9 +533,7 @@ namespace invsinc
                         catch (Exception)
                         {
 
-                        }
-
-                        
+                        }                        
 
                         lock (FileLock)
                         {
@@ -815,6 +898,7 @@ namespace invsinc
                             SendToSocket(s, BitConverter.GetBytes(1));
                             SendToSocket(s, new byte[1] { 3 });
 
+                            s.Dispose();
 
                             Thread.Sleep(preloginTo);
 
@@ -1007,7 +1091,8 @@ namespace invsinc
 
                         break;
                 }
-
+                if ((DateTime.Now - start).TotalMilliseconds > 1 && ((int)(DateTime.Now - start).TotalMilliseconds) != 30000)
+                    Log($"EndedRequest: Total: {(int)((DateTime.Now - start).TotalMilliseconds)}ms Rcv: {(int)((afterRcv - start).TotalMilliseconds)}ms Process+Send: {(int)((DateTime.Now - afterRcv).TotalMilliseconds)}ms {packetid} {name}");
             }
             catch (Exception e)
             {
