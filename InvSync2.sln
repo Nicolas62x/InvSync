@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30717.126
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32014.148
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "InvSync2", "InvSync2\InvSync2.csproj", "{66E7F626-2138-43BB-A932-215FEDDA07AB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "InvSync", "InvSync2\InvSync.csproj", "{66E7F626-2138-43BB-A932-215FEDDA07AB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
