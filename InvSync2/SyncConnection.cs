@@ -2,34 +2,26 @@
 using System;
 using System.Buffers;
 using System.Net.Sockets;
+using System.Threading;
 
 namespace InvSync;
 
 class SyncConnection
 {
-    const int MaxPacketLen = 1_000_000;
-    const int retryAttemps = 10;
+    const int MaxPacketLen = 1_000_000_000;
 
-    static ArrayPool<byte> pool = ArrayPool<byte>.Shared;
+    static readonly byte[] InvalidRequest = { 1, 0, 0, 0, 255 };
 
-    Socket s;
-    PacketHeader CurrentPacket;
-
-    byte[] buf;
-    int ToRead;
-    int Red;
+    AsyncSocket s;
+    PacketHeader CurrentPacket;    
 
     public SyncConnection(Socket s)
     {
-        this.s = s;
+        this.s = new AsyncSocket(s, Update);
 
-        ToRead = 5;
-        Red = 0;
-
-        buf = pool.Rent(ToRead);
-
-        CurrentPacket.ID = 0;
         CurrentPacket.Len = 0;
+
+        this.s.ReadData(5);
     }
 
     public static void Listen(Socket s)
@@ -40,65 +32,43 @@ class SyncConnection
             return;
         }
 
-        SyncConnection co = new SyncConnection(s);
-
-        co.StartListening();
+        new SyncConnection(s);
     }
 
-    void Update()
+    //called when a packet is red
+    void Update(byte[] buffer, int len)
     {
-        //finished reading data
-        if (Red == ToRead)
+        try
         {
             //need to parse header
             if (CurrentPacket.Len == 0)
             {
-                CurrentPacket = Utils.ByteArrayToStructure<PacketHeader>(buf);
+                CurrentPacket = Utils.ByteArrayToStructure<PacketHeader>(buffer);
 
-                Utils.ReturnBuf(ref buf, pool);
+                InvSync.AddRequest();
 
-                buf = pool.Rent(CurrentPacket.Len);
+                //handle rejection if packet is too long
+                if (CurrentPacket.Len > MaxPacketLen)
+                    throw new Exception($"{CurrentPacket.Len} exeeds max packet lenght of {MaxPacketLen} bytes");
+
+                s.ReadData(CurrentPacket.Len - 1);
             }
-            //need to parse packet
+            //handle packet
             else
             {
+                PacketID id = CurrentPacket.ID;
 
+                CurrentPacket.Len = 0;
+                s.ReadData(5);
+
+                s.SendData(SyncPacket.HandlePacket(id, buffer, len));
             }
         }
-        //still data to read
-        else
+        catch (Exception e)
         {
+            Logger.LogError(e.ToString());
 
+            s.Kill(InvalidRequest);
         }
-    }
-
-    void StartListening()
-    {
-        for (int i = 1; i <= retryAttemps; i++)
-            try
-            {
-                s.BeginReceive(buf, Red, ToRead, SocketFlags.None, OnReceived, this);
-                return;
-            }
-            catch (Exception e)
-            {
-                if (i == retryAttemps)
-                {
-                    Logger.LogError(e.ToString());
-                    throw;
-                }
-            }
-    }
-
-    static void OnReceived(IAsyncResult res)
-    {
-        if (res.AsyncState is null)
-            return;
-
-        SyncConnection co = (SyncConnection)res.AsyncState;
-
-        co.Red += co.s.EndReceive(res);
-
-        co.Update();
     }
 }

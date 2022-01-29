@@ -11,5 +11,5 @@ namespace InvSync.Packets;
 struct PacketHeader
 {
     public int Len;
-    public byte ID;
+    public PacketID ID;
 }

@@ -30,6 +30,9 @@ static class Utils
 
     public static void ReturnBuf<T>(ref T[] buf, ArrayPool<T> pool)
     {
+        if (buf is null)
+            return;
+
         pool.Return(buf);
         buf = null;
     }
