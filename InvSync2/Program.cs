@@ -2,19 +2,61 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace InvSync;
 static class Progam
 {
-    static void Check(byte id)
+    public static void Main(string[] args)
     {
+        InvSync.Listen();
 
-        Socket s = new Socket(SocketType.Stream, ProtocolType.Tcp);
+        Test();
 
-        s.Connect(new IPEndPoint(IPAddress.IPv6Loopback, 7342));
-        s.NoDelay = true;
-        s.LingerState.Enabled = false;
+        while (true)
+        {
+            Logger.TitleWrite($"{InvSync.RequestPerS:0.00} R/s");
+            Thread.Sleep(250);
+        }
+    }
 
+    //------------------This Section is only use for testing------------------------
+
+    static void Test()
+    {
+        for (byte i = 0; i < 8; i++)
+        {
+            byte tmp = i;
+
+            Task.Run(() =>
+            {
+                Thread.Sleep(2000);
+
+                using Socket s = new Socket(SocketType.Stream, ProtocolType.Tcp);
+
+                s.Connect(new IPEndPoint(IPAddress.IPv6Loopback, 7342));
+                s.NoDelay = true;
+                s.LingerState.Enabled = false;
+
+                while (true)
+                {
+                    try
+                    {
+
+                        Check(tmp, s);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.LogError(e.ToString());
+                        return;
+                    }
+                }
+            });
+        }
+    }
+
+    static void Check(byte id, Socket s)
+    {
         byte[] buf = new byte[10001];
 
         new Random().NextBytes(buf);
@@ -79,43 +121,7 @@ static class Progam
 
         if (data[0] > 128)
             Logger.LogError($"Responded with {data[0]}");
-        s.Dispose();
     }
-    
-
-    public static void Main(string[] args)
-    {
-        InvSync.Listen();
-
-        /*for (byte i = 0; i < 1; i++)
-        {
-            byte tmp = i;
-
-            Task.Run(() =>
-            {
-                Thread.Sleep(2000);
-
-                while (true)
-                {
-                    try
-                    {
-                        Check(tmp);
-                    }
-                    catch (Exception)
-                    {
-
-                    }
-                }
-            });
-        }*/
-
-        while (true)
-        {
-            Logger.TitleWrite($"{InvSync.RequestPerS:0.00} R/s");
-            Thread.Sleep(250);
-        }
-    }
-
 
     static byte[] RcvFromSocket(Socket s, int len)
     {
