@@ -11,7 +11,7 @@ static class Progam
     {
         InvSync.Listen();
 
-        Test();
+        //Test();
 
         while (true)
         {
